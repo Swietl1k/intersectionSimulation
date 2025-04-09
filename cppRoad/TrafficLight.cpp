@@ -47,22 +47,15 @@ void TrafficLight::run() {
         switch (currentPattern) {
         case LightPattern::EASTWEST:
             std::cout << "eastwest : " << greenTime << std::endl;
-            std::cout << waitingCars / 4 << std::endl;
             break;
         case LightPattern::SOUTHBOUND:
             std::cout << "southbound : " << greenTime << std::endl;
-            std::cout << waitingCars / 2 << std::endl;
-
             break;
         case LightPattern::NORTHBOUND:
             std::cout << "northbound : " << greenTime << std::endl;
-            std::cout << waitingCars  / 2<< std::endl;
-
             break;
         case LightPattern::LEFTTURN:
             std::cout << "leftturn : " << greenTime << std::endl;
-            std::cout << waitingCars / 2<< std::endl;
-
             break;
         }
 
@@ -107,60 +100,6 @@ void TrafficLight::run() {
     }
 }
 
-/*
-void TrafficLight::run() {
-    int nPattern = 0;
-	while (true) {
-
-        // toDo! implement an algorithm to manage traffic flow
-        if (nPattern == 0) {
-            setPattern(LightPattern::X_STRAIGHT);
-        }
-        if (nPattern == 1) {
-            setPattern(LightPattern::Y_STRAIGHT);
-        }
-        if (nPattern == 2) {
-            setPattern(LightPattern::X_LEFT);
-        }
-        if (nPattern == 3) {
-            setPattern(LightPattern::Y_LEFT);
-        }
-        nPattern++;
-        if (nPattern == 4) { nPattern = 0; }
-
-        {
-            std::lock_guard<std::mutex> lock(lightMutex);
-            laneStatesRead = laneStates;
-        }
-
-        std::this_thread::sleep_for(std::chrono::seconds(4)); 
-
-        for (auto& [lane, color] : laneStates) {
-            if (color == LightColor::GREEN) {
-                color = LightColor::YELLOW;
-            }
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(lightMutex);
-            laneStatesRead = laneStates;
-        }
-
-        std::this_thread::sleep_for(std::chrono::seconds(3));
-
-        for (auto& [lane, color] : laneStates) {
-            if (color == LightColor::YELLOW) {
-                color = LightColor::RED;
-            }
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(lightMutex);
-            laneStatesRead = laneStates;
-        }
-	}
-}
-*/
 
 LightColor TrafficLight::getState(std::string lane) {
     std::lock_guard<std::mutex> lock(lightMutex);

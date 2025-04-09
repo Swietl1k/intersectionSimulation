@@ -13,10 +13,9 @@ Car::Car(int lane, char turnDirection, int maxSpeed, int acceleration) : lane(la
 
 
 void Car::updatePos(float deltaTime, const Car* carAhead, bool isGreen, bool isOut) {
-	constexpr float PI = 3.14159265358979323846f;
+	constexpr float PI = 3.14159265f;
 	constexpr float minGap = 20.0f;
 	int breakDist = ((speed * speed) / (2 * acceleration));
-	float distanceToFront = INFINITY;
 
 	auto shouldBrake = [&](bool condition) {
 		if (condition) {
@@ -28,54 +27,74 @@ void Car::updatePos(float deltaTime, const Car* carAhead, bool isGreen, bool isO
 	};
 
 
-	// deciding whether the car should accelerate or decelerate
 	if (isOut) {
 		speed = std::min(maxSpeed, speed + acceleration * deltaTime);
 	}
-	else if (carAhead != nullptr) {
+	else if (!isGreen && carAhead == nullptr) {
+
+		// break at lights
+		switch (startDirection) {
+		case Direction::West:
+			shouldBrake(position.x - breakDist <= 500);
+			break;
+		case Direction::East:
+			shouldBrake(position.x + breakDist >= 300);
+			break;
+		case Direction::North:
+			shouldBrake(position.y - breakDist <= 530);
+			break;
+		case Direction::South:
+			shouldBrake(position.y + breakDist >= 270);
+			break;
+		}
+	}
+	else if (!isGreen && carAhead != nullptr) {
 		int aheadBreakDist = (carAhead->speed * carAhead->speed) / (2 * carAhead->acceleration);
 		float carAheadX = carAhead->position.x;
 		float carAheadY = carAhead->position.y;
 
+		// break at lights or break earlier if car ahead will get too close
 		switch (startDirection) {
 		case Direction::West:
-			shouldBrake(position.x - breakDist <= carAheadX - aheadBreakDist + 20);
+			shouldBrake(position.x - breakDist <= 500 || position.x - breakDist <= carAheadX - aheadBreakDist + minGap);
 			break;
 		case Direction::East:
-			shouldBrake(position.x + breakDist >= carAheadX + aheadBreakDist - 20);
+			shouldBrake(position.x + breakDist >= 300 || position.x + breakDist >= carAheadX + aheadBreakDist - minGap);
 			break;
 		case Direction::North:
-			shouldBrake(position.y - breakDist <= carAheadY - aheadBreakDist + 20);
+			shouldBrake(position.y - breakDist <= 530 || position.y - breakDist <= carAheadY - aheadBreakDist + minGap);
 			break;
 		case Direction::South:
-			shouldBrake(position.y + breakDist >= carAheadY + aheadBreakDist - 20);
+			shouldBrake(position.y + breakDist >= 270 || position.y + breakDist >= carAheadY + aheadBreakDist - minGap);
+			break;
+		}
+	}
+	else if (isGreen && carAhead != nullptr) {
+		int aheadBreakDist = (carAhead->speed * carAhead->speed) / (2 * carAhead->acceleration);
+		float carAheadX = carAhead->position.x;
+		float carAheadY = carAhead->position.y;
+
+		// follow car ahead
+		switch (startDirection) {
+		case Direction::West:
+			shouldBrake(position.x - breakDist <= carAheadX - aheadBreakDist + minGap);
+			break;
+		case Direction::East:
+			shouldBrake(position.x + breakDist >= carAheadX + aheadBreakDist - minGap);
+			break;
+		case Direction::North:
+			shouldBrake(position.y - breakDist <= carAheadY - aheadBreakDist + minGap);
+			break;
+		case Direction::South:
+			shouldBrake(position.y + breakDist >= carAheadY + aheadBreakDist - minGap);
 			break;
 		}
 	}
 	else {
-		if (!isGreen) { 
-			switch (startDirection) {
-			case Direction::West:
-				shouldBrake(position.x <= 500 + breakDist);
-				break;
-			case Direction::East:
-				shouldBrake(position.x + breakDist >= 300 - breakDist);
-				break;
-			case Direction::North:
-				shouldBrake(position.y - breakDist <= 530 + breakDist);
-				break;
-			case Direction::South:
-				shouldBrake(position.y + breakDist >= 270 - breakDist);
-				break;
-			}
-			
-		}
-		else {
-			speed = std::min(maxSpeed, speed + acceleration * deltaTime);
-		}
+		// no car in the way and light is green so go
+		speed = std::min(maxSpeed, speed + acceleration * deltaTime);
 	}
-
-
+	
 	// movement patterns based on the lane, turnDirection and progress
 	switch (lane) { 
 	case 0:

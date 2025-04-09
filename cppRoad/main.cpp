@@ -13,10 +13,11 @@
 const int WINDOW_WIDTH = 800;
 const int WINDOW_HEIGHT = 800;
 const float TIME_PER_UPDATE = 1.0f / 60.0f;
-const int NEW_CAR_INTERVAL = 1;
-const int CARS_PER_INTERVAL = 6; // cant be more than 10
+const int NEW_CAR_INTERVAL = 2;
+const int CARS_PER_INTERVAL = 5; // cant be more than 10
 const int CAR_MAX_SPEED = 60;
 const int CAR_ACCELERATION = 20;
+const int UPDATE_STATS_INTERVAL = 5;
 const std::unordered_set<int> eastLanes = { 0, 1, 2 };
 const std::unordered_set<int> southLanes = { 3, 4 };
 const std::unordered_set<int> westLanes = { 5, 6, 7 };
@@ -47,8 +48,7 @@ void drawCars(sf::RenderWindow& window, std::vector<std::vector<Car>>& lanes, st
 }
 
 
-void updateLanes(TrafficLight& trafficLight, std::vector<std::vector<Car>>& lanes, std::vector<std::vector<Car>>& lanesRead, std::vector<std::vector<Car>>& lanesPastLight) {
-    std::unordered_map<std::string, LightColor> laneStates = trafficLight.getAllStates();
+void updateLanes(TrafficLight& trafficLight, std::vector<std::vector<Car>>& lanes, std::vector<std::vector<Car>>& lanesRead, std::vector<std::vector<Car>>& lanesPastLight, int& carsPassedCount, std::unordered_map<std::string, LightColor> laneStates) {
 
     for (int laneIdx = 0; laneIdx < lanes.size(); ++laneIdx) {
         std::vector<Car>& lane = lanes[laneIdx];
@@ -111,6 +111,7 @@ void updateLanes(TrafficLight& trafficLight, std::vector<std::vector<Car>>& lane
         if (firstCar.getPosition().x < -150.0f || firstCar.getPosition().x > 960.0f ||
             firstCar.getPosition().y < -150.0f || firstCar.getPosition().y > 960.0f) {
             lane.erase(lane.begin());
+            carsPassedCount++;
         }
 
         for (int carIdx = 0; carIdx < lane.size(); ++carIdx) {
@@ -134,19 +135,24 @@ void newCars(std::vector<std::vector<Car>>& lanes, std::vector<std::vector<Car>>
     for (int i = 0; i < CARS_PER_INTERVAL; i++) {
         int lane = randLane();
 
-        if (xPlaneLanes.contains(lane) && lanes[lane].size() >= 17) {
-            alreadyPicked.insert(lane); //skip if the lane is full
-        }
-        else if (yPlaneLanes.contains(lane) && lanes[lane].size() >= 15) {
-            alreadyPicked.insert(lane); //skip if the lane is full
-        }
+        int attempts = 0;
+        while (true) {
+            if (!alreadyPicked.contains(lane)) {
+                bool isX = xPlaneLanes.contains(lane);
+                bool isY = yPlaneLanes.contains(lane);
+                int maxCars = isX ? 17 : (isY ? 15 : 0);
 
-        if (alreadyPicked.size() == 10) {
-            return; //all lanes full
-        }
+                if (lanes[lane].size() < maxCars) {
+                    break;  // found a good lane 
+                }
 
-        while (alreadyPicked.contains(lane)) {
+                alreadyPicked.insert(lane);  // add full lane to alreadyPicked
+            }
+
             lane = randLane();
+
+            if ( alreadyPicked.size() >= 10)
+                return;  //prevent infinite loops 
         }
 
         alreadyPicked.insert(lane);
@@ -166,33 +172,106 @@ void newCars(std::vector<std::vector<Car>>& lanes, std::vector<std::vector<Car>>
 }
 
 
+void drawTrafficLights(sf::RenderWindow& window, const std::unordered_map<std::string, LightColor>& laneStates, sf::Sprite& arrowSprite) {
+    for (const auto& [laneKey, color] : laneStates) {
+        int lane = laneKey[0] - '0';  // convert first char to int
+        char dir = laneKey[1];        // 'l', 's', or 'r'
+
+        float x = 0, y = 0, rotation = 0;
+        if (dir == 'r' && color == LightColor::GREEN) {
+            if (lane == 0) { x = 500; y = 283; rotation = 90.0f; }
+            else if (lane == 3) { x = 483; y = 530; rotation = 180.0f; }
+            else if (lane == 5) { x = 280; y = 513; rotation = 270.0f; }
+            else if (lane == 8) { x = 303; y = 250; rotation = 0.0f; }
+
+            arrowSprite.setOrigin(sf::Vector2f(13, 13));
+            arrowSprite.setPosition(sf::Vector2f(x, y));
+            arrowSprite.setRotation(sf::degrees(rotation));
+            window.draw(arrowSprite);
+            continue; // skip to next light
+        }
+        else if (dir == 'r' && color != LightColor::GREEN) {
+            continue; // skip unnecessary code (we only draw green arrows)
+        }
+
+        sf::RectangleShape light;
+        // set color
+        switch (color) {
+        case LightColor::GREEN:  
+            light.setFillColor(sf::Color::Green); 
+            break;
+        case LightColor::YELLOW: 
+            light.setFillColor(sf::Color::Yellow); 
+            break;
+        case LightColor::RED:    
+            light.setFillColor(sf::Color::Red); 
+            break;
+        }
+
+        // position the rectangle near the end of the lane
+        if (eastLanes.contains(lane)) {
+            x = 480;
+            y = 310 + lane * 30;
+            light.setSize(sf::Vector2f(10.f, 30.f));
+        }
+        else if (westLanes.contains(lane)) {
+            x = 310;
+            y = 460 - (lane - 5) * 30;
+            light.setSize(sf::Vector2f(10.f, 30.f));
+        }
+        else if (northLanes.contains(lane)) {
+            x = 340 + (lane - 8) * 30;
+            y = 280;
+            light.setSize(sf::Vector2f(30.f, 10.f));
+        }
+        else if (southLanes.contains(lane)) {
+            x = 430 - (lane - 3) * 30;
+            y = 510;
+            light.setSize(sf::Vector2f(30.f, 10.f));
+        }
+
+        light.setPosition(sf::Vector2f(x, y));
+        window.draw(light);
+    }
+}
+
 int main()
 {
     sf::RenderWindow window(sf::VideoMode{ sf::Vector2u{ WINDOW_WIDTH, WINDOW_HEIGHT } }, sf::String{ "4-Way Intersection" });
     window.setFramerateLimit(60);
 
     sf::Texture backgroundTexture;
-    if (!backgroundTexture.loadFromFile("background2.png")) {
+    if (!backgroundTexture.loadFromFile("images/background2.png")) {
         std::cerr << "Error: Could not load background.png" << std::endl;
         return -1;
     }
+    sf::Texture arrowTexture;
+    if (!arrowTexture.loadFromFile("images/arrow.png")) {
+        std::cerr << "Error: Could not load arrow.png" << std::endl;
+        return -1;
+    }
+    sf::Sprite arrowSprite(arrowTexture);
 
     std::vector<std::vector<Car>> lanes(10);
     std::vector<std::vector<Car>> lanesRead(10);
     std::vector<std::vector<Car>> lanesPastLight(10);
+    int carsPassedCount = 0;
     TrafficLight trafficLight(lanesRead);
     std::thread trafficThread(&TrafficLight::run, &trafficLight);
 
     sf::Sprite backgroundSprite(backgroundTexture);
+    sf::Clock tempClock;
     sf::Clock clock;
-    float accumulatedTimeU = 0.0f;
-    float accumulatedTimeN = 0.0f;
+    float accumulatedTimeUpdate = 0.0f;
+    float accumulatedTimeNew = 0.0f;
+    float accumulatedTimeStat = 0.0f;
     float resTime;
 
     while (window.isOpen()) {
-        resTime = clock.restart().asSeconds();
-        accumulatedTimeU += resTime;
-        accumulatedTimeN += resTime;
+        resTime = tempClock.restart().asSeconds();
+        accumulatedTimeUpdate += resTime;
+        accumulatedTimeNew += resTime;
+        accumulatedTimeStat += resTime;
 
         while (const std::optional event = window.pollEvent()) {
         
@@ -207,16 +286,24 @@ int main()
             }
         }
 
+        window.clear();
         window.draw(backgroundSprite);
 
-        if (accumulatedTimeN >= NEW_CAR_INTERVAL) {
+        if (accumulatedTimeNew >= NEW_CAR_INTERVAL) {
             newCars(lanes, lanesRead);
-            accumulatedTimeN = 0.0f;
+            accumulatedTimeNew = 0.0f;
         }
 
-        while (accumulatedTimeU >= TIME_PER_UPDATE) {
-            updateLanes(trafficLight, lanes, lanesRead, lanesPastLight);
-            accumulatedTimeU -= TIME_PER_UPDATE;
+        while (accumulatedTimeUpdate >= TIME_PER_UPDATE) {
+            std::unordered_map<std::string, LightColor> laneStates = trafficLight.getAllStates();
+            updateLanes(trafficLight, lanes, lanesRead, lanesPastLight, carsPassedCount, laneStates);
+            drawTrafficLights(window, laneStates, arrowSprite);
+            accumulatedTimeUpdate -= TIME_PER_UPDATE;
+        }
+
+        if (accumulatedTimeStat >= UPDATE_STATS_INTERVAL) {
+            std::cout << (carsPassedCount * 60) / clock.getElapsedTime().asSeconds() << " cars per minute" << std::endl;
+            accumulatedTimeStat = 0;
         }
 
         drawCars(window, lanes, lanesPastLight);
